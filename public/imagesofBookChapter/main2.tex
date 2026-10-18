@@ -1,0 +1,871 @@
+\pagestyle{plain}
+\documentclass[12pt]{book}
+
+%------------------------------------------------
+% Packages
+%------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{caption}
+\usepackage{subcaption}
+\let\cleardoublepage\clearpage
+\usepackage{float}
+
+%------------------------------------------------
+% Title Information
+%------------------------------------------------
+\title{Comparative Evaluation of Federated Aggregation Strategies for Disease Detection Using Chest X-Ray Images}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+%------------------------------------------------
+\chapter{Introduction}
+
+\section{Background and Motivation}
+
+Convolutional Neural Networks (CNNs) excel in computer vision by capturing spatial hierarchies in images. Their convolutional operations extract layered features, enabling tasks such as classification, detection, and segmentation.
+
+Vision Transformers (ViTs) use the transformer architecture, originally developed for language, to divide images into fixed-size patches and treat them as tokens. When trained on large datasets, ViTs often match or surpass the performance of traditional CNNs while requiring fewer inductive biases.
+
+Transformer-based models, including ViTs, have achieved strong results in medical imaging, often matching or outperforming CNNs in diagnosis tasks.
+
+Transformers, unlike CNNs, provide global self-attention, capturing broad image dependencies vital in medical imaging.
+
+Training deep learning models for medical imaging requires diverse data, yet relying on datasets from a single hospital can limit generalization due to demographic and geographic biases.
+
+Sharing raw patient data between healthcare institutions to form a centralized dataset is often restricted by privacy regulations, such as HIPAA and GDPR, making data aggregation difficult in practice.
+
+Federated Learning (FL) enables institutions to jointly train models by sharing only model updates—offering collaboration without compromising data privacy.
+
+This chapter evaluates federated aggregation strategies for robust privacy-preserving chest X-ray classification in both IID and Non-IID scenarios, aiming to develop a generalizable framework.
+
+\section{Importance of Aggregation in Federated Learning}
+
+Model aggregation in FL combines client-trained models into one global model while preserving privacy. The chosen aggregation method greatly affects model accuracy, and research has advanced beyond simple averaging due to its issues with low-quality and malicious updates.
+
+In centralized federated learning, model aggregation takes place at a central server. This server gathers trained models from clients and combines them into one improved model.
+We run numerical experiments training deep neural networks (DNNs) with various datasets in IID and Non-IID settings. We study four aggregation strategies, namely: FedAvg, FedProx, Scaffold, and FedAdam.
+
+\textbf{Data Heterogeneity.}
+One of the major challenges in federated learning is data heterogeneity. In FL systems, local datasets across clients often differ significantly in terms of class distribution, data volume, sensor configurations, and feature characteristics. These differences lead to non-independent, non-identically distributed (Non-IID) data, which can negatively impact model convergence, reduce generalization, and cause instability during training.
+
+\textbf{Variations in System Configurations.}
+Clients participating in federated learning typically operate under diverse system conditions. Differences in hardware resources, network bandwidth, storage capacity, and energy constraints can affect the training process. As a result, adaptive client selection mechanisms are often required to select available, capable clients at each communication round.
+
+\textbf{Fairness and Personalization.}
+Optimizing a single global model for all clients may not benefit all participants equally, particularly those with minority-class distributions or unique data characteristics. This can lead to unfair performance across clients. In sensitive domains such as healthcare and finance, ensuring fairness and personalization of models becomes critically important.
+
+\textbf{Scalability.}
+Scalability remains a major challenge for the large-scale deployment of federated learning systems. Managing thousands, or even millions, of participating clients requires efficient communication protocols, scalable aggregation mechanisms, and robust infrastructure to support model updates and bandwidth allocation.
+
+\textbf{Privacy and Security Concerns.}
+Despite improved privacy, FL remains vulnerable to security threats, including model inversion, gradient leakage, and malicious updates, which can compromise data and model integrity. drop out or participate unpredictably, slowing convergence and reducing stability.
+
+In non-IID settings, class-aware loss functions that adjust weights to account for local class imbalance can improve model robustness.
+
+\textbf{Aggregation of Client Updates.}
+A central server in federated learning collects model updates from participating clients and aggregates them to update the global model. Choosing an appropriate aggregation strategy is critical, as the method's effectiveness depends on the data distribution, particularly whether it is IID or Non-IID.
+
+\section{Objectives and Contributions of the Chapter}
+
+This paper explains the working principles of four well-known federated learning aggregation strategies: FedAvg, FedProx, and SCAFFOLD. The study examines how these strategies perform in both independent and identically distributed (IID) and non-independent and identically distributed (non-IID) data settings. It pays special attention to how each aggregation method addresses data variability, communication efficiency, and model convergence in distributed training environments.
+
+The main goal is to evaluate the strength and effectiveness of these federated optimization techniques in medical image analysis, particularly for tasks involving chest X-ray data. By carefully examining their training behavior and performance metrics, this work seeks to identify which strategies work best in real-world healthcare situations where data is spread across multiple institutions. The findings provide insights into the advantages and disadvantages of each method and highlight their potential to enable privacy-focused collaborative learning in medical imaging applications.
+
+\begin{itemize}
+\item To evaluate different federated aggregation strategies for pneumonia detection.
+\item To analyze performance under IID and Non-IID data distributions.
+\item To study communication efficiency and convergence behavior.
+\item To provide practical insights for deployment in healthcare systems.
+\end{itemize}
+
+\chapter{Federated Learning Framework}
+
+\section{Problem Formulation}
+
+We consider the task of image classification in a \textbf{Federated Learning (FL)} framework, where a global model is collaboratively trained across $K$ distributed clients. Each client $k$ owns a local dataset.
+
+\begin{equation}
+D_k = {(x_{k,i}, y_{k,i})}_{i=1}^{N_k},
+\end{equation}
+
+where $x_{k,i}$ denotes the $i$-th input image and $y_{k,i} \in {1,2,\ldots,C}$ represents its corresponding class label among $C$ possible classes. The overall training data is distributed across clients such that
+
+\begin{equation}
+D = \bigcup_{k=1}^{K} D_k .
+\end{equation}
+
+A key challenge in this setting is \textbf{data heterogeneity}, arising from non-identically distributed (non-IID) data across clients and class imbalance, where certain classes may have significantly fewer samples than others.
+
+Let $f(x;\theta)$ denote the global model parameterized by $\theta$. The objective is to learn model parameters that achieve strong classification performance across all clients and classes while respecting the decentralized nature of the data.
+
+The global optimization problem is formulated as minimizing a \textbf{weighted aggregation of local empirical losses}:
+
+\begin{equation}
+\min_{\theta} \sum_{k=1}^{K} \alpha_k^{(\cdot)} , \mathcal{L}_k(\theta; D_k),
+\end{equation}
+
+where
+
+\begin{itemize}
+\item $\mathcal{L}_k(\theta; D_k)$ denotes the local loss computed on client $k$'s dataset,
+\item $\alpha_k^{(\cdot)}$ represents the \textbf{dynamic weighted averaging coefficient} assigned to client $k$,
+\item the formulation intentionally leaves the weighting function \textbf{open for dynamic adaptation} (e.g., based on data quality, class distribution, training progress, or other criteria).
+\end{itemize}
+
+The aggregation weights satisfy the normalization constraint.
+
+\begin{equation}
+\sum_{k=1}^{K} \alpha_k^{(\cdot)} = 1, \qquad \alpha_k^{(\cdot)} \ge 0 .
+\end{equation}
+
+This flexible formulation enables the integration of \textbf{dynamic weighting strategies} that can adapt during training to mitigate performance degradation caused by heterogeneous client data distributions.
+
+To capture global contextual relationships in images, we adopt a \textbf{Vision Transformer (ViT)} architecture. ViT represents an image as a sequence of flattened patches and employs a transformer encoder to model long-range dependencies between image regions. This design allows the model to dynamically attend to informative parts of the image, thereby improving representation learning under heterogeneous data conditions.
+
+\section{Objective Function}
+In federated learning, the global model is trained collaboratively across multiple decentralized clients without sharing their raw data. However, real-world federated datasets often exhibit significant class imbalance and heterogeneity across clients. To address this challenge, the proposed framework introduces a dual-level imbalance modelling mechanism consisting of a \textit{client-level imbalance factor} and a \textit{federation-level imbalance factor}. These imbalance signals are incorporated into a Dynamic Adaptive Focal Loss (DAFL) used during client-side training. Furthermore, an adaptive weighted aggregation strategy is employed at the server to combine the locally trained models.
+
+The overall global objective of the federated system is defined as the minimization of the expected loss across all participating clients:
+
+\begin{equation}
+\min_{w} F(w) =
+\sum_{k=1}^{K} \frac{N_k}{N}
+\mathbb{E}{(x,y)\sim D_k}
+\left[
+-(1 + c{f,y})(1 - p_y)^{\gamma} \log(p_y)
+\right]
+\end{equation}
+
+where (K) denotes the number of clients, (N_k) represents the number of samples at client (k), and (N = \sum_{k=1}^{K} N_k) is the total number of samples across the federation. (D_k) denotes the local dataset of client (k), and (p_y) is the predicted probability of the true class (y). The term (c_{f,y}) represents the federation-level imbalance coefficient associated with class (y).
+
+\subsubsection{Client-Level Imbalance}
+
+The imbalance within each client dataset is quantified using a client-level imbalance parameter (c_k), which measures the skewness of the class distribution at client (k). It is defined as
+
+\begin{equation}
+c_k = \frac{1}{C} \sum_{i=1}^{C} \frac{N_k - n_{k,i}}{n_{k,i} + \epsilon}
+\end{equation}
+
+where (C) denotes the total number of classes, (n_{k,i}) represents the number of samples of class (i) at client (k), and (\epsilon) is a small constant added for numerical stability.
+
+\subsubsection{Federation-Level Imbalance}
+
+To capture the imbalance across the entire federation, a global imbalance coefficient (c_{f,i}) is computed at the server for each class (i). This coefficient highlights classes that are globally underrepresented across all participating clients, enabling the model to focus more strongly on rare classes.
+
+\begin{equation}
+c_{f,i} = \frac{N - N_i}{N_i + \epsilon}
+\end{equation}
+
+where (N_i) represents the total number of samples belonging to class (i) across all clients.
+
+\subsubsection{Dynamic Adaptive Focal Loss}
+
+During client-side training, the model parameters are optimized using a Dynamic Adaptive Focal Loss (DAFL). This loss function integrates the federation-level imbalance coefficient into the focal loss formulation, thereby simultaneously emphasizing hard examples and rare classes.
+
+For a sample with true class (t), the loss is defined as
+
+\begin{equation}
+\mathcal{L}{DAFL} =
+-(1 + c{f,t})(1 - p_t)^{\gamma} \log(p_t)
+\end{equation}
+
+where (p_t) denotes the predicted probability of the true class (t), and (\gamma) is a focusing parameter that controls the contribution of hard versus easy examples.
+
+\subsubsection{Local Training Objective}
+
+Each client optimizes its local objective using the DAFL loss over its dataset. The local objective function for client (k) is defined as
+
+\begin{equation}
+F_k(w) =
+\frac{1}{|D_k|}
+\sum_{(x,y)\in D_k}
+\mathcal{L}_{DAFL}(x,y)
+\end{equation}
+
+where (|D_k|) denotes the number of samples in the local dataset of client (k).
+
+\subsubsection{Server-Side Model Aggregation}
+
+After local training, the updated client models are transmitted to the server, where they are aggregated to update the global model. The aggregation is performed using adaptive weighted averaging:
+
+\begin{equation}
+w^{t+1} =
+\sum_{k=1}^{K}
+\alpha_k w_k^{t}
+\end{equation}
+
+where (w_k^{t}) represents the model parameters obtained from client (k) at communication round (t), and (\alpha_k) denotes the aggregation weight assigned to client (k). These weights can be designed to reflect the size or imbalance characteristics of the client data.
+
+This formulation enables the federated model to simultaneously account for local data heterogeneity, rare global classes, and varying sample importance across the federation, thereby improving robustness in highly imbalanced federated learning environments.
+
+\section{Role of Aggregation in Model Convergence}
+
+Aggregation is a crucial part of the federated learning (FL) framework. In a distributed learning setting, each client trains a model using its local dataset. The aggregation process combines the knowledge gained by all participating clients into one global model. Essentially, aggregation consolidates updates from distributed learning into a single model that benefits from the collective knowledge of all clients. This is similar to collaborative learning, where information from various decentralized datasets is combined to form a global model.
+
+The main goal of aggregation is to ensure that the global model reflects patterns across different data sources without requiring the transfer of raw data. Since federated learning often involves diverse data distributions and varying client resources, several aggregation algorithms have been proposed to effectively handle different training scenarios. In ideal cases where client datasets follow an Independent and Identically Distributed (IID) distribution, simple aggregation strategies often work well. One popular algorithm used in these situations is Federated Averaging (FedAvg). FedAvg aggregates the locally trained client models by averaging their parameters. The weights correspond to the number of training samples each client has compared to the total number of samples across all clients. However, real-world federated learning environments seldom meet the IID assumption. Often, datasets from different clients exhibit Non-IID distributions, meaning that data characteristics, class distributions, or feature representations can vary significantly between organizations. This heterogeneity can lead to client drift, slower convergence, and reduced model performance when using simple aggregation methods. To tackle these issues, several improved aggregation algorithms have been introduced.
+
+Several aggregation algorithms are commonly used in federated learning, including:
+
+\begin{itemize}
+\item \textbf{FedAvg:} Performs weighted averaging of client model parameters, where the weights are determined by the proportion of local training samples at each client.
+
+\item \textbf{FedProx:} Extends FedAvg by incorporating a proximal regularization term in the local objective function to limit excessive deviation of local updates from the global model.
+
+\item \textbf{SCAFFOLD:} Introduces control variates to mitigate client drift and improve convergence in federated settings with non-IID data.
+
+\end{itemize}
+
+These aggregation algorithms help federated learning systems effectively combine knowledge from multiple clients while ensuring data privacy and improving model performance across various data sources.
+
+\vspace{7cm}
+
+%------------------------------------------------
+\chapter{Aggregation Strategies Considered}
+
+\section{FedAvg}
+
+Federated Averaging (FedAvg) is a widely used optimization algorithm in federated learning. In this setting, the local objective function corresponding to the global objective at device $k$ is denoted by $F_k(\cdot)$. Each participating device employs stochastic gradient descent (SGD) as its local optimization method, using the same learning rate and number of local epochs.
+
+\begin{algorithm}[t]
+\caption{Federated Averaging (FedAvg)}
+\label{alg:fedavg}
+\begin{algorithmic}[1]
+
+\STATE \textbf{Input:} $K, T, \eta, E, w^0, N, p_k,; k = 1,\dots,N$
+
+\FOR{$t = 0, \dots, T-1$}
+
+\STATE Server selects a subset $S_t$ of $K$ devices at random (each device $k$ is chosen with probability $p_k$)
+
+\STATE Server sends $w^t$ to all selected devices
+
+\FOR{each device $k \in S_t$ \textbf{in parallel}}
+
+\STATE Perform $E$ epochs of SGD on local objective $F_k$ with learning rate $\eta$
+
+\STATE Obtain updated model parameters $w_k^{t+1}$
+
+\STATE Send $w_k^{t+1}$ to the server
+
+\ENDFOR
+
+\STATE Server aggregates the received models
+
+[
+w^{t+1} = \frac{1}{|S_t|}\sum_{k \in S_t} w_k^{t+1}
+]
+
+\ENDFOR
+
+\end{algorithmic}
+\end{algorithm}
+
+During each communication round, a subset $K$ of the total devices is selected to perform local training. Each selected device runs SGD on its local dataset for $E$ epochs. After completing the local updates, the resulting model parameters from all participating devices are sent to the server and aggregated through weighted averaging.
+
+This aggregation strategy performs effectively when multiple local epochs are used. Increasing the number of local epochs enables more local computation and reduces communication frequency, thereby accelerating convergence in networks with limited communication. However, when the local objective functions $F_k$ differ substantially across devices, performing many local epochs may cause each device to drift toward a solution optimal for its local data rather than the global objective.
+
+\section{FedProx}
+
+The FedProx algorithm extends the standard federated learning framework by introducing a proximal regularization term into the local optimization objective. This modification is designed to address the challenges caused by statistical heterogeneity among distributed clients, which is common in federated environments where data distributions differ significantly across institutions.\
+In Non-IID scenarios, performing multiple local updates can lead to substantial divergence between local client models and the global model. The proximal term constrains the local optimization process by penalizing large deviations from the current global model parameters. As a result, client updates remain closer to the shared global model, improving training stability and convergence behavior.\
+In this study, the local objective function integrates the proximal regularization term with the Dynamic Adaptive Focal Loss employed for pneumonia classification. This combination enhances robustness when training across clients with imbalanced class distributions and varying dataset sizes, which are typical characteristics of medical imaging datasets.\
+Additionally, a dynamic aggregation strategy is implemented at the server to improve the reliability of model updates. Unlike conventional FedAvg-style aggregation that relies solely on dataset-size weighting, the proposed method computes adaptive aggregation weights based on three client-specific indicators: the size of the local dataset, the local validation accuracy, and the magnitude of model drift from the global parameters. By incorporating these factors, the aggregation process emphasizes high-quality and stable client updates while reducing the impact of noisy or highly divergent updates.\
+This adaptive aggregation mechanism is particularly advantageous in medical federated learning systems, where participating institutions may exhibit substantial variations in data quality, patient demographics, and class imbalance. Consequently, the approach contributes to more stable training and improved global model performance for pneumonia detection from chest X-ray images.
+\begin{algorithm}[H]
+\caption{FedProx with Dynamic Weighted Aggregation}
+\label{alg:fedprox_dynamic}
+\begin{algorithmic}[H]
+\STATE \textbf{Input:} $K, T, \mu, \gamma, w^0, N, p_k,; k=1,\dots,N$
+
+\FOR{$t = 0, \dots, T-1$}
+
+\STATE Server selects a subset $S_t$ of $K$ devices at random
+\STATE \hspace{0.5cm}(each device $k$ is chosen with probability $p_k$)
+
+\STATE Server sends $w^t$ to all chosen devices
+
+\FOR{each device $k \in S_t$ \textbf{in parallel}}
+
+    \STATE Device $k$ computes local model update
+    \[
+    w_k^{t+1} \approx 
+    \arg\min_{w} \; F_k(w) + \frac{\mu}{2}\|w - w^t\|^2
+    \]
+
+    \STATE Compute local metrics
+    \STATE \hspace{0.5cm}Data size $n_k$
+    \STATE \hspace{0.5cm}Local accuracy $a_k^t$
+    \STATE \hspace{0.5cm}Model drift $d_k^t = \|w_k^{t+1} - w^t\|$
+
+    \STATE Send $\{w_k^{t+1}, n_k, a_k^t, d_k^t\}$ to server
+
+\ENDFOR
+
+\STATE Server computes dynamic aggregation weights
+\[
+\alpha_k^t =
+\frac{f(n_k, a_k^t, d_k^t)}
+{\sum_{j \in S_t} f(n_j, a_j^t, d_j^t)}
+\]
+
+\STATE Server aggregates client models
+\[
+w^{t+1} =
+\sum_{k \in S_t} \alpha_k^t w_k^{t+1}
+\]
+
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\section{SCAFFOLD}
+
+The SCAFFOLD (Stochastic Controlled Averaging for Federated Learning) algorithm is designed to address the problem of \textit{client drift} that arises in federated learning systems with heterogeneous data distributions. In traditional federated optimization methods such as FedAvg, local updates on non-identically distributed (Non-IID) client data may diverge from the global optimization direction, slowing convergence and reducing model stability.\
+SCAFFOLD mitigates this issue by introducing \textit{control variates} that estimate and correct the drift between client updates and the global optimization trajectory. Specifically, the server maintains a global control variate $c$, while each client maintains its own local control variate $c_i$. These variables act as estimates of the expected update direction of the global model and the local client models, respectively.\
+During local training, each client adjusts its gradient update using the correction term $(c - c_i)$. This correction compensates for the deviation introduced by heterogeneous local datasets and ensures that local updates remain aligned with the global optimization direction. After completing the local optimization steps, clients compute both model updates and control variate updates, which are transmitted to the server for aggregation.\
+At the server side, the received updates are averaged across participating clients to update both the global model parameters and the global control variate. This coordinated update mechanism effectively reduces the variance caused by client heterogeneity and improves the stability of the federated training process.\
+From an optimization perspective, SCAFFOLD can be viewed as a \textit{variance-reduction technique} for federated learning. By reducing the variance introduced by heterogeneous client updates, the algorithm significantly improves convergence speed and requires fewer communication rounds compared to traditional aggregation methods.\
+In the context of pneumonia detection using chest X-ray images, where client datasets from different hospitals may vary in size, imaging protocols, and patient demographics, SCAFFOLD provides a robust mechanism for maintaining stable global training. Its ability to correct client drift makes it particularly suitable for federated medical imaging systems with strong non-IID data distributions.
+\vspace{-5cm}
+\begin{algorithm}[H]
+\caption{SCAFFOLD: Stochastic Controlled Averaging for Federated Learning}
+\label{alg:scaffold}
+\begin{algorithmic}[1]
+
+\STATE \textbf{Server input:} initial model $x$ and control variate $c$, global step-size $\eta_g$
+\STATE \textbf{Client input:} $c_i$ and local step-size $\eta_l$
+
+\FOR{each round $r = 1, \dots, R$}
+
+\STATE Sample clients $S \subseteq {1,\dots,N}$
+
+\STATE \textbf{Communicate} $(x, c)$ to all clients $i \in S$
+
+\FOR{each client $i \in S$ \textbf{in parallel}}
+
+\STATE Initialize local model $y_i \leftarrow x$
+
+\FOR{$k = 1,\dots,K$}
+
+\STATE Compute stochastic gradient $g_i(y_i)$
+
+\STATE $y_i \leftarrow y_i - \eta_l (g_i(y_i) - c_i + c)$
+
+\ENDFOR
+
+\STATE Update control variate
+[
+c_i^{+} \leftarrow c_i - c + \frac{1}{K\eta_l}(x - y_i)
+]
+
+\STATE Compute model and control updates
+[
+(\Delta y_i, \Delta c_i) \leftarrow (y_i - x, c_i^{+} - c_i)
+]
+
+\STATE Send $(\Delta y_i, \Delta c_i)$ to server
+
+\STATE $c_i \leftarrow c_i^{+}$
+
+\ENDFOR
+
+\STATE Aggregate updates
+[
+(\Delta x, \Delta c) \leftarrow
+\frac{1}{|S|} \sum_{i \in S} (\Delta y_i, \Delta c_i)
+]
+
+\STATE Update global variables
+[
+x \leftarrow x + \eta_g \Delta x
+]
+
+[
+c \leftarrow c + \frac{|S|}{N} \Delta c
+]
+
+\ENDFOR
+
+\end{algorithmic}
+\end{algorithm}
+
+%------------------------------------------------
+\chapter{Experimental Methodology}
+
+\section{Chest X-Ray Dataset Description}
+
+Following the overview of the experimental framework, it is essential to describe the datasets used to evaluate the proposed federated learning setup. The performance of deep learning models, particularly in medical image analysis, largely depends on the quality and diversity of the training data. In this study, publicly available chest X-ray datasets containing multiple respiratory disease categories were utilized to simulate a distributed healthcare environment. These datasets allow us to evaluate the capability of federated learning algorithms to collaboratively learn diagnostic patterns across multiple institutions while preserving data privacy.\
+
+The experiments were conducted using two publicly available Chest X-Ray image datasets containing radiographic images of various respiratory diseases.The datasets consist of four classes: COVID-19, Pneumonia,Tuberculosis, Normal.\
+
+These datasets were selected to simulate real-world healthcare scenarios in which hospitals maintain their own patient records and cannot share raw medical data due to privacy regulations. Each dataset corresponds to an independent federated client, enabling collaborative training without centralized data storage. To evaluate the global model's performance, the test datasets from both clients were combined into a single evaluation dataset. This approach enables assessment of the model’s ability to generalize across heterogeneous medical data sources.
+
+\section{Data Preprocessing and Augmentation}
+While the availability of large medical imaging datasets enables effective training of deep learning models, raw medical images often vary in resolution, intensity distribution, and orientation. Such variations can negatively impact model performance if not properly handled. Therefore, before training the models, it is necessary to apply several preprocessing and augmentation techniques to standardize the input data and improve the robustness of the learning process.
+Preprocessing plays a particularly important role in federated learning environments, where data is distributed across multiple clients or institutions. In such settings, each client may collect medical images using different imaging devices, acquisition protocols, or clinical conditions, resulting in variations in image quality and feature representation. If these inconsistencies are not addressed through preprocessing, the local models trained at different clients may learn significantly different feature distributions. This can lead to unstable model updates during the federated aggregation process and may degrade the performance of the global model.\
+By applying consistent preprocessing techniques across all clients, the input data is standardized, reducing discrepancies between local datasets and enabling the model to learn more generalizable patterns. Furthermore, preprocessing helps stabilize the training process by ensuring the model receives inputs within a controlled numerical range, facilitating faster convergence during optimization.
+In addition to standardization, data augmentation techniques are also employed to artificially increase the diversity of the training data. Augmentation methods, such as random rotations and horizontal flips, help the model learn invariant features that are robust to variations in image orientation and position. This is particularly important in federated learning, where each client may have only a limited number of data samples. By increasing the variability of the training data, augmentation helps reduce overfitting and improve the generalization capability of the global model across distributed datasets.\
+
+The preprocessing pipeline implemented in PyTorch is shown below:
+
+\begin{verbatim}
+_transform = transforms.Compose([
+transforms.Resize((224, 224)),
+transforms.RandomHorizontalFlip(),
+transforms.ToTensor(),
+transforms.Normalize([0.485, 0.456, 0.406],
+[0.229, 0.224, 0.225])
+])
+\end{verbatim}
+
+\subsection{Image resizing}
+As a first step, all images were resized to a fixed spatial resolution of 224 × 224 pixels. Standardizing the image size is an important preprocessing step because deep learning architectures require inputs of consistent dimensions. By resizing the images to a uniform resolution, the model can process the input data efficiently without encountering dimensional mismatches during training. Furthermore, selecting a resolution of 224 × 224 pixels aligns with the input requirements of commonly used deep learning architectures and allows the model to capture sufficient spatial information from the chest X-ray images while maintaining computational efficiency.
+
+\subsection{Image Normalization}
+
+Following image resizing, normalization was applied to standardize the pixel intensity values across the dataset. The images were normalized using the widely adopted ImageNet mean and standard deviation values, given by:\
+Mean = [0.485, 0.456, 0.406]\
+Standard Deviation = [0.229, 0.224, 0.225]\
+Normalization transforms pixel values to a standardized range, helping stabilize the training process and improving the numerical behavior of optimization algorithms. In deep learning, especially when training large neural networks, normalization reduces internal covariate shift and enables faster convergence during gradient-based optimization. As a result, the model can learn more effectively from the input data and achieve improved generalization performance.
+In the context of federated learning, consistent preprocessing across all participating clients is particularly important. Since the data is stored locally at each client, applying identical preprocessing procedures ensures that the local models are trained on inputs with the same statistical distribution. This consistency helps reduce discrepancies in client updates during model aggregation and contributes to a more stable, reliable global model.
+
+\section{ Model Architecture for Chest X-ray Classification}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{/home/ybl/Desktop/latex/FederatedLearning/Untitled design.png}
+\caption{ViT pretrained model in the client and the server}
+\label{fig:vit}
+\end{figure}
+
+Once the input data is prepared, this stage of the experimental framework involves selecting an appropriate deep learning architecture that can extract meaningful features from medical images and accurately classify them into their respective disease categories.
+To perform multi-class classification of chest X-ray images, this study employs a Vision Transformer (ViT)-based architecture, implemented using the timm deep learning library. Although traditional convolutional neural networks (CNNs) have been widely used for medical image analysis, transformer-based models have recently demonstrated strong performance in computer vision tasks by capturing global contextual relationships within images.
+The proposed architecture utilizes the ViT-Small Patch16-224 model, which divides the input image into smaller patches and processes them using a transformer encoder. This design enables the model to learn both local and global visual representations, which is particularly beneficial for identifying subtle patterns present in chest X-ray images.
+The model is initialized with pre-trained weights, enabling it to leverage knowledge from large-scale image datasets. Transfer learning significantly improves performance on medical datasets, which are often smaller than general-purpose image datasets.
+Within the architecture, the input image of size 224 × 224 pixels is divided into non-overlapping 16 × 16-pixel patches. Each patch is then embedded into a high-dimensional feature vector, which serves as the input to the transformer encoder layers. These encoder layers use multi-head self-attention to capture relationships across different regions of the image. This allows the model to focus on important anatomical structures that may indicate the presence of respiratory diseases.
+To improve generalization and reduce overfitting, regularization techniques are incorporated into the model. Specifically, a dropout rate of 0.1 and a stochastic depth (drop path rate) of 0.1 are applied during training. These mechanisms help the model learn more robust feature representations while preventing over-reliance on specific neurons.
+In addition, the original classification head of the Vision Transformer is modified to adapt the model to the specific task of multi-class disease classification. The final classification layer is replaced with a custom head comprising a dropout layer followed by a fully connected linear layer that maps the extracted features to the four target classes: COVID-19, Pneumonia, Tuberculosis, and Normal.
+Furthermore, a learnable parameter $\gamma$ (gamma) is introduced within the architecture to support the custom loss formulation used during training. This parameter controls the loss function's focus, enabling the model to place greater emphasis on difficult or misclassified samples during optimization.
+During the forward pass, the input image is first processed by the transformer feature-extraction layers. The resulting feature embeddings are normalized, and the classification token (CLS) is extracted to represent the image as a whole. This token summarizes the contextual information captured across all image patches and is then passed through the modified classification head to generate the final prediction.
+By combining the strengths of transformer-based architectures with customized classification layers, the proposed model effectively captures complex patterns in chest X-ray images, enabling accurate detection and classification of respiratory diseases within a federated learning framework.
+
+\section{Federated Setup}
+
+While the Vision Transformer architecture described in the previous section can effectively extract meaningful features from chest X-ray images, the primary objective of this research is to evaluate its performance within a federated learning framework. Unlike traditional centralized machine learning approaches, in which all data is collected and processed in a single location, federated learning enables multiple participants to collaboratively train a shared global model while keeping their data locally.
+\The following subsection describes the configuration of the federated learning setup used in this study.
+\subsubsection{Clients}{}
+In the proposed experimental setup, the federated system consists of two clients, each corresponding to a different chest X-ray dataset. These datasets simulate a scenario in which multiple healthcare institutions collaborate to train a shared diagnostic model.
+Each client maintains its own local copy of the global model and performs training using its locally available data. Since the datasets originate from different sources, the distribution of samples across clients may vary, which reflects real-world data heterogeneity commonly observed in healthcare systems.
+\subsubsection{Communication Rounds}
+Federated learning training is performed over several communication rounds. During each communication round, the following steps are executed:
+The central server distributes the global model to all participating clients.
+Each client trains the received model locally using its private dataset.
+After completing local training, the clients send their updated model parameters back to the server.
+The server aggregates the updates received from all clients to produce an improved global model.
+This process is repeated for a fixed number of communication rounds to gradually improve the global model's performance. In this study, the federated training process was conducted over 25 communication rounds, allowing the model to progressively learn from distributed datasets while maintaining training stability.
+\subsubsection{Local Epochs}
+During each communication round, clients perform multiple local training epochs on their respective datasets before transmitting the model updates to the server. Local epochs determine how many times the client iterates over its dataset during a single communication round.
+Using multiple local epochs allows each client to extract richer feature representations from its local data before contributing updates to the global model. However, increasing the number of local epochs may also introduce client drift, particularly when data distributions differ significantly across clients.
+To balance learning efficiency and training stability, each client performs five local epochs per communication round in the experimental setup. This configuration allows the model to learn sufficiently from local datasets while maintaining effective global aggregation.
+\subsubsection{Global Model Aggregation}
+After receiving the updated model parameters from all clients, the server aggregates the updates using different federated optimization algorithms, including FedAvg, FedProx, and SCAFFOLD. These algorithms differ in the way they handle model updates and mitigate issues such as client drift and data heterogeneity.
+The aggregated global model is then redistributed to the clients for the next communication round, enabling continuous collaborative learning across the distributed datasets.
+Through this iterative process of local training and global aggregation, the federated learning framework enables the development of a robust disease classification model without requiring centralized access to sensitive medical data.\
+
+\begin{table}[h]
+\centering
+\caption{Training Hyperparameters}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Parameter} & \textbf{Value} \ \hline
+Number of clients & 4 \ \hline
+Global Communication Rounds & 25 \ \hline
+Local training epochs & 2 \ \hline
+Batch size & 32 \ \hline
+Learning rate & $1e^{-4}$ \ \hline
+Optimizer & AdamW \ \hline
+Weight decay & $5e^{-3}$ \ \hline
+Gradient clipping & 1.0 \ \hline
+LR scheduler & ReduceLROnPlateau \ \hline
+EarlyStopping & Patience = 3 or 7 \ \hline
+\end{tabular}
+\label{tab:training_params}
+\end{table}
+
+\vspace{2.5cm}
+
+\section{Data Partitioning Strategy}
+
+\subsection{IID (Independent and Identically Distributed) Partitioning}
+
+In the IID setting, the dataset is distributed across clients such that each client receives a similar proportion of samples from every class. This means the dataset's statistical properties remain consistent across all participating clients. Under this configuration, each client observes a balanced dataset, allowing locally trained models to learn similar feature distributions.
+This scenario represents an idealized federated learning environment where the local updates generated by different clients are relatively consistent with one another. As a result, when these updates are aggregated at the central server, the global model converges smoothly and efficiently. Evaluating federated learning algorithms under IID conditions provides a baseline for understanding their performance in environments with minimal data heterogeneity.
+
+\subsection{Non-IID Partitioning Using Dirichlet Distribution}
+
+We use the Dirichlet distribution to simulate realistic federated learning scenarios where clients have heterogeneous data distributions. For each class in the dataset, all files are collected and randomly shuffled. A Dirichlet distribution with parameter $\alpha$ generates a probability vector that determines how samples of that class are distributed among the clients. The parameter $\alpha$ controls the degree of heterogeneity in the data distribution:
+
+\begin{itemize}
+\item Small $\alpha$ values (e.g., $\alpha = 0.5$) produce highly skewed distributions, resulting in strongly Non-IID data.
+\item Larger $\alpha$ values produce more balanced distributions, making the data closer to IID.
+\end{itemize}
+
+The sampled Dirichlet proportions are multiplied by the total number of files in the class to determine how many samples each client receives. To address rounding discrepancies, adjustments are applied to ensure the total number of assigned files matches the original dataset size. Finally, the selected files are copied to each client’s class directory. This method produces heterogeneous client datasets, in which some clients may contain significantly more samples from specific classes than others. Such a setup effectively reflects the data imbalance and distribution shifts commonly observed in real-world federated learning environments.
+
+\section{Evaluation Metrics}
+
+\subsection{Evaluation Metrics and Performance Analysis}
+
+After defining the IID and Non-IID data partitioning strategies used in the federated environment, the next step is to establish a systematic approach for evaluating the performance of the trained models. Since federated learning involves distributed training across multiple clients and iterative aggregation at the central server, it is important to evaluate not only the predictive performance of the global model but also the efficiency of the training process. Therefore, a comprehensive evaluation framework is required to assess both the model's classification capability and the effectiveness of federated optimization algorithms across different data distribution scenarios.
+
+To analyze the performance of the proposed federated learning framework, several evaluation metrics are used. These metrics provide a comprehensive understanding of the model's classification performance and the efficiency of the federated training process. Since the task involves multi-class classification of chest X-ray images into four disease categories, it is important to evaluate the model using metrics that capture different aspects of prediction quality.
+
+In the federated learning setting, evaluation is performed using the global model obtained after each communication round. Once the server aggregates the local model updates from all clients, the updated global model is evaluated on a combined test dataset containing samples from all participating clients. This evaluation strategy ensures that the model's performance reflects its ability to generalize across distributed, heterogeneous datasets.
+
+The following metrics are used to assess the performance of the model:
+
+\subsubsection{Accuracy}
+
+Accuracy measures the overall proportion of correctly classified samples among the total number of predictions made by the model. It provides a general indication of the model’s ability to correctly identify disease categories in chest X-ray images.
+
+\begin{equation}
+Accuracy = \frac{TP + TN}{TP + TN + FP + FN}
+\end{equation}
+
+where:
+\begin{itemize}
+\item $TP$ = True Positives
+\item $TN$ = True Negatives
+\item $FP$ = False Positives
+\item $FN$ = False Negatives
+\end{itemize}
+
+\textbf{Training (Loss & Accuracy)}\
+The performance of client models during Federated Training rounds is measured using Training loss & Accuracy. steadily increasing training accuracy denotes the classification performance of the local model on the training data, reflecting stabilized aggregation.
+A steadily decreasing training loss indicates that the model has been successfully optimizing the objective function (Dynamic Adaptive Focal Loss in our case).\textbf{Validation (Loss & Accuracy)}\
+Validation metrics help in evaluating how well the global model generalizes across clients. Validation metrics are computed from the global model's performance on images not used during training. A higher validation accuracy denotes a good aggregation method.
+Validation metrics help with hyperparameter tuning, such as the learning rate, client participation rate, number of local epochs, and aggregation algorithm parameters.
+
+\textbf{Test (Loss & Accuracy)}\
+Test metrics are used to observe the performance of the final aggregated model on completely unseen data. Test metrics reflect the performance of the global model in the real world.\
+
+A higher accuracy value indicates better overall classification performance.
+
+\subsubsection{Precision}
+
+Precision measures the proportion of correctly predicted positive samples among all samples the model predicts as positive. In medical diagnosis, precision is particularly important because it indicates how reliable the model’s positive predictions are.
+
+\begin{equation}
+Precision = \frac{TP}{TP + FP}
+\end{equation}
+
+A high-precision value indicates that the model produces fewer false-positive predictions.
+
+\subsubsection{Recall}
+
+Recall, also known as sensitivity, measures the model's ability to correctly identify all relevant positive samples. In medical image analysis, recall is crucial because failing to detect a disease case can have serious clinical implications.
+
+\begin{equation}
+Recall = \frac{TP}{TP + FN}
+\end{equation}
+
+Higher recall indicates that the model successfully identifies a larger proportion of actual disease cases.
+
+\subsubsection{F1-Score}
+
+The F1-score provides a balanced evaluation of the model by combining precision and recall into a single metric. It is particularly useful when dealing with imbalanced datasets, which are common in medical imaging applications.
+
+\begin{equation}
+F1\text{-}Score = 2 \times \frac{Precision \times Recall}{Precision + Recall}
+\end{equation}
+
+This metric provides a more comprehensive assessment of the model’s classification performance, accounting for both false positives and false negatives.
+
+\subsubsection{Communication Cost}
+
+In addition to predictive performance, federated learning systems must also consider the efficiency of communication between clients and the central server. Since model parameters are exchanged in each communication round, communication overhead can significantly affect the scalability of the federated learning framework.
+
+Communication cost is evaluated based on the number of communication rounds required for the global model to converge and achieve stable performance. Algorithms that reach high accuracy in fewer communication rounds are considered more communication-efficient.
+
+Analyzing communication cost is particularly important when comparing federated optimization algorithms such as \textit{FedAvg}, \textit{FedProx}, and \textit{SCAFFOLD}, as these algorithms differ in how efficiently they utilize communication between clients and the server during training.\
+
+\subsubsection{Confusion matrix}
+A table used to evaluate the performance of a classification model by comparing the actual values with the predicted values. It shows us the quantity of data that was predicted correctly and incorrectly.\
+
+\subsubsection{Summary of Evaluation Strategy}
+
+By combining classification metrics such as accuracy, precision, recall, and F1-score with system-level metrics such as communication cost, the evaluation framework provides a comprehensive analysis of the federated learning models. This approach enables a detailed comparison of the three federated algorithms used in this study—FedAvg, FedProx, and SCAFFOLD—under both IID and Non-IID data distribution scenarios.
+
+The next section presents the experimental results and comparative analysis of these algorithms, highlighting their performance differences and convergence behavior in distributed medical image classification tasks.
+
+%------------------------------------------------
+\chapter{Results and Comparative Analysis}
+
+\section{Performance under IID Distribution}
+
+\subsection{Performance of FedAvg under IID Distribution}
+The performance of the FedAvg algorithm is illustrated in Figures 5.1(a) and 5.1(b), which present the accuracy and loss curves for training, validation, and testing datasets across communication rounds.
+As shown in the accuracy curve, the training accuracy steadily increases from approximately 86% in the first communication round to nearly 99% by the eighth round, demonstrating effective learning of the classification task. The validation accuracy also improves consistently, reaching approximately 91–92% in later rounds.
+The testing accuracy follows a similar trend, stabilizing around 90%, indicating that the model performs reliably on unseen samples.
+The loss curves further confirm this behavior. The training loss decreases progressively from approximately 0.63 in the first round to below 0.1, reflecting successful optimization of the model parameters. The validation and test losses initially decrease during the early rounds and later stabilize around 0.30, indicating that the model maintains consistent predictive performance without excessive overfitting.
+Overall, the results demonstrate that FedAvg performs effectively under IID conditions due to the balanced data distribution across clients. Since each client observes a similar dataset distribution, the local model updates remain relatively consistent, allowing the global aggregation process to converge efficiently.
+
+\begin{figure}[H]
+\centering
+
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_IID_DAW_loss.png}
+\caption{Loss}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_IID_DAW_acc.png}
+\caption{Accuracy}
+\end{subfigure}
+
+\caption{FedAvg performance under IID data distribution}
+\label{fig:fedavg_iid_metrics}
+
+\end{figure}
+
+\subsection{Performance of FedProx under IID Distribution}
+Figures 5.2(a) and 5.2(b) present the loss and accuracy curves for the FedProx algorithm under an IID data distribution.
+The training loss decreases steadily across communication rounds, dropping from approximately 1.37 in the first round to nearly 0.13 by the tenth round, indicating progressive improvement in the model’s ability to fit the training data. The validation and test loss curves follow a similar trend, stabilizing around 0.30, suggesting consistent generalization across unseen samples.
+In terms of accuracy, the training accuracy increases significantly from approximately 78% in the first round to nearly 98% in the final round, demonstrating strong learning capability. The validation accuracy gradually improves to approximately 88–89%, while the test accuracy stabilizes at 90–91%.
+The slightly lower validation accuracy compared to training accuracy may indicate mild overfitting during later rounds. However, the proximal regularization term introduced in the FedProx algorithm helps constrain local model updates, preventing excessive divergence from the global model and maintaining overall training stability.
+
+\begin{figure}[H]
+\centering
+
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_IID_DAW_loss.png}
+\caption{Loss}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_IID_DAW_acc.png}
+\caption{Accuracy}
+\end{subfigure}
+
+\caption{FedProx performance under IID data distribution}
+\label{fig:fedprox_iid_metrics}
+\end{figure}
+
+\subsection{Performance of SCAFFOLD under IID Distribution}
+The training and validation performance of the SCAFFOLD algorithm is illustrated in Figure 5.3 (Loss and Accuracy Curves). The results demonstrate that the SCAFFOLD algorithm converges rapidly during the initial communication rounds. The training loss decreases significantly from approximately 0.45 in the first round to near zero in later rounds, indicating effective learning of discriminative features from the chest X-ray dataset.
+Similarly, the validation loss declines sharply during early training and stabilizes at 0.1–0.15, suggesting the model generalizes well to unseen data without significant overfitting.
+In terms of accuracy, the training accuracy increases rapidly from approximately 70% in the first round to above 98% within a few communication rounds. The validation accuracy follows a similar trend, reaching approximately 95–97% and remaining relatively stable throughout the training process. The close alignment between training and validation accuracy indicates that the model maintains strong generalization performance under IID data conditions.
+The observed performance improvements highlight the effectiveness of the SCAFFOLD algorithm in stabilizing federated optimization by using control variates to correct client updates and reduce variance during aggregation.
+
+\begin{figure}[H]
+\centering
+\hfill
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/scaffold.png}
+\caption{SCAFFOLD performance under IID data distribution}
+\label{fig:scaffold_iid_metrics}
+\end{figure}
+
+\subsection{Comparative Analysis of Algorithms under IID Distribution}
+
+The experimental results under IID data distribution demonstrate that all three federated learning algorithms—FedAvg, FedProx, and SCAFFOLD—achieve strong classification performance for the chest X-ray disease detection task.
+Among the evaluated methods, SCAFFOLD shows the fastest convergence and the highest validation accuracy, which can be attributed to its use of control variates that correct client updates during local training. This mechanism helps reduce variance during aggregation and accelerates global model convergence.
+FedAvg also performs well under IID conditions due to the balanced data distribution across clients. Since the local datasets share similar statistical properties, the model updates generated by different clients remain consistent, allowing the global model to converge efficiently.
+FedProx also demonstrates stable performance, benefiting from the proximal regularization term that constrains local updates. Although its validation accuracy is slightly lower than SCAFFOLD's, it offers improved robustness against potential client drift.
+Overall, the results indicate that federated learning algorithms can achieve high classification accuracy under an IID data distribution, with SCAFFOLD providing the most stable and efficient convergence among the evaluated methods.
+
+\begin{table}[H]
+\centering
+\caption{Performance under IID data distribution}
+\label{tab:iid_results}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm & Accuracy & Precision & Recall & F1-score \
+\midrule
+FedAvg & – & – & – & – \
+FedProx & – & – & – & – \
+SCAFFOLD & – & – & – & – \
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Performance under Non-IID Distribution}
+
+To analyze how different federated optimization algorithms handle this challenge, experiments were conducted under a Non-I.i.d. data distribution. In this configuration, the dataset was partitioned across clients using a heterogeneous data distribution strategy, and the performance of FedAvg, FedProx, and SCAFFOLD was evaluated using training, validation, and testing metrics across multiple communication rounds.
+
+\subsection{ Performance of FedAvg under Non-IID Distribution}
+The performance of the FedAvg algorithm under a non-IID data distribution can be analyzed through training, validation, and test accuracy and loss curves across multiple communication rounds. From the accuracy curve, it can be observed that the training accuracy increases consistently throughout the training process, starting at approximately 91% in the initial communication round and gradually approaching nearly 100% in later rounds. This steady improvement indicates that the model effectively learns the patterns in the training datasets during the federated training process.
+However, a noticeable difference exists between the training accuracy and the validation and test accuracy. While the training accuracy continues to increase steadily, the validation accuracy fluctuates between approximately 85% and 88%, and the test accuracy remains within the range of 86% to 89% across most communication rounds. These fluctuations suggest that although the model fits the training data effectively, its ability to generalize to unseen data is comparatively less stable.
+A similar trend can be observed in the loss curves. The training loss decreases significantly from approximately 7 in the initial communication round to nearly zero in later rounds, indicating that the model progressively adapts to the training data and improves its classification performance. In contrast, the validation and test loss values do not decrease at the same rate as the training loss and remain relatively stable around 0.3–0.5 across the communication rounds. This indicates that the model does not achieve the same level of optimization on unseen data as it does on the training data.
+The divergence between training and validation/test performance can largely be attributed to the heterogeneity introduced by the Non-IID data distribution. Since each client possesses datasets with varying class distributions, the locally trained models may learn different feature representations. When heterogeneous updates are aggregated using the FedAvg algorithm, the global model may experience inconsistent optimization directions, leading to fluctuations in validation and test performance.
+Overall, these results highlight a well-known limitation of the FedAvg algorithm in heterogeneous federated learning environments. Although the algorithm achieves high training accuracy, client drift and inconsistent local updates can degrade the generalization of the global model when client data distributions are highly diverse.
+
+\begin{figure}[H]
+\centering
+
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_nonIID_acc.png}
+\caption{Loss}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedavg_nonIID_loss.png}
+\caption{Accuracy}
+\end{subfigure}
+
+\caption{FedAvg performance under non-IID data distribution}
+\label{fig:fedavg_non_iid_metrics}
+\end{figure}
+
+\subsection{ Performance of FedProx under Non-IID Distribution}
+The performance of the FedProx algorithm under a non-IID data distribution is analyzed using training, validation, and test accuracy and loss curves across multiple rounds of federated communication. FedProx extends FedAvg by introducing a proximal regularization term that constrains local model updates to remain closer to the global model parameters. This mechanism helps reduce the divergence of local updates caused by heterogeneous client datasets.
+From the accuracy curve, it can be seen that the training accuracy improves steadily across the communication rounds, starting at approximately 83% in the initial round and gradually increasing to nearly 99% in later rounds. This consistent improvement indicates that the global model effectively learns the underlying patterns in the distributed training datasets.
+The validation and test accuracy curves also demonstrate relatively stable performance throughout the training process. The validation accuracy fluctuates between approximately 91% and 93%, while the test accuracy remains around 89% to 91% across most communication rounds. Compared to the FedAvg results under the same Non-IID setting, the validation and test accuracy in FedProx exhibit reduced fluctuations and improved stability, suggesting that the proximal regularization helps maintain better alignment between local and global models during aggregation.
+A similar trend can be observed in the loss curves. The training loss decreases significantly from approximately 1.1 in the first communication round to nearly 0.05 in the final rounds, indicating effective parameter optimization during federated training. In contrast, the validation and test loss values decrease initially and later stabilize around 0.25–0.40, showing that the model maintains consistent predictive performance on unseen samples.
+Although the training loss approaches near-zero values in later rounds, the validation and test losses remain comparatively higher. This difference suggests a moderate gap between training and generalization performance; however, it is smaller than that observed with the FedAvg algorithm under Non-IID conditions. The improved stability observed in FedProx can be attributed to the proximal term included in the local objective function, which limits excessive divergence between local and global model parameters. By constraining local updates, FedProx effectively mitigates client drift, a common problem in federated learning with heterogeneous data distributions.
+Overall, the experimental results demonstrate that FedProx provides more stable convergence and improved generalization performance compared to FedAvg under non-IID data distributions, making it a more suitable optimization strategy for federated learning environments with data heterogeneity across clients.
+
+\begin{figure}[H]
+\centering
+
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedprox_nonIID_DAW_loss.png}
+\caption{Loss}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/fedprox_nonIID_DAW_acc.png}
+\caption{Accuracy}
+\end{subfigure}
+
+\caption{FedProx performance under non-IID data distribution}
+\label{fig:fedprox_non_iid_metrics}
+\end{figure}
+
+\subsection{ Performance of SCAFFOLD under Non-IID Distribution}
+The performance of the SCAFFOLD (Stochastic Controlled Averaging for Federated Learning) algorithm under a non-IID data distribution is illustrated by the training and validation loss and accuracy curves shown in Figure 5.6. SCAFFOLD is specifically designed to address the client drift problem that commonly occurs in federated learning environments with heterogeneous client data distributions. It achieves this by introducing control variates, which serve as correction terms that guide local model updates towards the global optimization direction.
+From the accuracy curve, it can be observed that the training accuracy increases rapidly during the initial communication rounds, rising from approximately 75% in the first round to above 95% within a few rounds. As the training progresses, accuracy gradually improves, reaching nearly 98–99% in later communication rounds. This rapid increase indicates that the model effectively learns the underlying patterns present in the distributed chest X-ray datasets.
+The validation accuracy follows a similar trend: it initially increases significantly and then stabilizes between 94% and 96% across the majority of communication rounds. Compared with FedAvg and FedProx under the same Non-IID setting, SCAFFOLD achieves higher validation accuracy and lower fluctuations, indicating improved generalization to unseen data.
+The loss curves further confirm the effectiveness of the SCAFFOLD algorithm. The training loss decreases sharply from approximately 0.35 in the initial round to values close to zero in subsequent rounds, demonstrating successful parameter optimization. Meanwhile, the validation loss drops significantly during the early rounds and then stabilizes around 0.13–0.16, suggesting that the model maintains consistent predictive performance without significant overfitting.
+The relatively small gap between training and validation performance indicates that SCAFFOLD successfully balances learning efficiency and generalization capability even when the data distribution across clients is heterogeneous. This behavior can be attributed to the control variate mechanism, which corrects the direction of local updates and reduces the variance introduced by Non-IID datasets.
+Overall, the results demonstrate that SCAFFOLD achieves faster convergence, lower validation loss, and more stable accuracy compared to FedAvg and FedProx under Non-IID conditions. By effectively mitigating client drift, SCAFFOLD enables more reliable global model optimization in federated learning environments where data heterogeneity is unavoidable.
+
+\begin{figure}[H]
+\centering
+\hfill
+\includegraphics[width=\linewidth]{/home/ybl/Desktop/latex/FederatedLearning/scaffold_nonIID.png}
+\caption{SCAFFOLD performance under non-IID data distribution}
+\label{fig:scaffold_non_iid_metrics}
+\end{figure}
+
+\subsection{Comparative Analysis of Algorithms under non-IID Distribution}
+\begin{table}[H]
+\centering
+\caption{Performance under Non-IID data distribution}
+\label{tab:noniid_results}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm & Accuracy & Precision & Recall & F1-score \
+\midrule
+FedAvg & – & – & – & – \
+FedProx & – & – & – & – \
+SCAFFOLD & – & – & – & – \
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Convergence Analysis (Accuracy vs Communication Rounds)}
+After evaluating the performance of federated learning algorithms under both IID and Non-IID data distributions, it is important to analyze how quickly the global model converges during training. In federated learning, convergence refers to the global model's ability to progressively improve its predictive performance as the number of communication rounds between clients and the server increases. Studying convergence behavior helps in understanding how efficiently different algorithms learn from distributed datasets and how stable their training dynamics remain throughout the federated optimization process.
+The convergence patterns observed in the experimental results indicate that the three algorithms exhibit different learning behaviors across communication rounds. In general, the training accuracy for all algorithms increases steadily as federated training progresses, indicating that the global model gradually improves its ability to capture the underlying features in the distributed chest X-ray datasets.
+However, the rate of improvement in accuracy varies across the algorithms. The FedAvg algorithm converges more slowly and less stably under heterogeneous data distributions, as locally trained models may diverge due to differences across client datasets. This divergence often leads to fluctuations in validation and test accuracy during later communication rounds.
+In contrast, FedProx demonstrates more stable convergence behavior. By incorporating a proximal regularization term in the local optimization objective, FedProx restricts the deviation of local model updates from the global model parameters. This constraint helps maintain better alignment between client updates and improves the stability of the aggregation process, resulting in smoother, more consistent accuracy progression across communication rounds.
+Among the evaluated methods, SCAFFOLD exhibits the most consistent convergence pattern. The algorithm effectively corrects the direction of local updates using control variates, thereby mitigating client drift caused by heterogeneous data distributions. As a result, the accuracy curve stabilizes more quickly, indicating efficient learning of the global model.
+Overall, the convergence analysis shows that algorithms designed to address client drift can significantly improve the stability and reliability of federated learning systems when training across distributed, heterogeneous datasets.
+
+\section{Communication Efficiency Comparison}
+In addition to convergence behavior, another critical aspect of federated learning systems is communication efficiency. Since federated learning relies on iterative communication between the central server and distributed clients, the number of communication rounds required for the model to achieve stable performance directly affects the overall training cost. Communication overhead can become a significant bottleneck in large-scale federated environments where numerous clients participate in the training process.
+The experimental results indicate that the communication efficiency varies across the evaluated algorithms. In the case of FedAvg, the model requires more communication rounds to achieve stable performance, particularly under Non-IID data conditions. This is primarily due to the absence of mechanisms that explicitly address the divergence of local updates. Consequently, additional communication rounds are often necessary for the global model to recover from inconsistent updates and gradually approach convergence.
+The FedProx algorithm improves communication efficiency by introducing a proximal term that stabilizes local training. By limiting the deviation between the local and global models, FedProx helps reduce the variance of client updates. This results in more consistent global model updates, allowing the model to reach stable performance with fewer fluctuations during training.
+The SCAFFOLD algorithm further enhances communication efficiency by using control variates to correct local gradient updates during training. This mechanism significantly reduces the variance caused by heterogeneous data distributions, enabling the global model to converge more reliably across communication rounds. As a result, SCAFFOLD typically achieves stable performance with fewer communication adjustments compared to the other algorithms.
+These observations indicate that incorporating mechanisms to correct client drift can substantially improve the communication efficiency of federated learning systems, making them more suitable for large-scale distributed applications.
+
+\section{Discussion of Observations}
+The comparative analysis of the three federated learning algorithms reveals several important insights regarding their behavior in distributed medical image classification tasks. The experimental results demonstrate that data heterogeneity plays a crucial role in determining the performance of federated optimization methods. When the data distribution across clients is balanced, all algorithms achieve strong performance. However, under Non-IID conditions, differences in client data distributions can significantly influence the training dynamics of the global model.
+The results indicate that algorithms specifically designed to address the challenges of heterogeneous data distributions generally perform more reliably in federated environments. The baseline FedAvg algorithm, while simple and widely adopted, may be unstable when client datasets differ substantially. This instability arises from divergent local updates, which can compromise the consistency of the global model aggregation process.
+In comparison, FedProx introduces a regularization mechanism that helps maintain closer alignment between local and global models during training. This additional constraint reduces the impact of local data heterogeneity and improves training stability. The results suggest that this approach can yield noticeable improvements in generalization performance when client data is unevenly distributed.
+Among the evaluated algorithms, SCAFFOLD demonstrates the most stable training behavior in heterogeneous settings. By incorporating control variates that adjust local updates, the algorithm effectively reduces the variance introduced by Non-IID data distributions. This leads to improved convergence stability and more consistent performance across communication rounds.
+Overall, the experimental findings highlight the importance of addressing client drift and data heterogeneity in federated learning systems. The ability of an algorithm to manage these challenges directly influences its convergence behavior, communication efficiency, and overall predictive performance. These insights are particularly relevant for medical imaging applications, where data is naturally distributed across institutions and often exhibits significant variability.
+
+\chapter{Practical Implications for Medical Federated Systems}
+The experimental analysis presented in the previous sections highlights how different federated learning algorithms behave under both IID and Non-IID data distributions. While these findings provide valuable insights from a methodological perspective, it is equally important to examine their practical implications for real-world healthcare environments. Medical federated learning systems must operate under strict privacy regulations, heterogeneous data distributions, and limited network resources. Therefore, selecting appropriate aggregation strategies and understanding system-level trade-offs becomes critical when deploying federated learning models in hospital networks.
+
+\section{Aggregation Strategy Selection for Healthcare Applications}
+One of the most important design decisions in a medical federated learning system is the choice of aggregation strategy for combining local model updates from participating clients. Different aggregation algorithms exhibit varying levels of robustness to data heterogeneity, convergence stability, and communication efficiency.
+The baseline FedAvg algorithm offers a simple, computationally efficient aggregation mechanism, making it suitable for scenarios where participating institutions maintain relatively balanced datasets. However, healthcare environments often involve significant variability in patient populations, disease prevalence, and imaging protocols. Under such heterogeneous conditions, the basic averaging strategy may lead to unstable convergence due to inconsistent local updates.
+To address these challenges, more advanced aggregation mechanisms such as FedProx and SCAFFOLD provide improved robustness in heterogeneous settings. FedProx introduces a proximal regularization term that constrains the deviation of local models from the global model during training. This helps maintain alignment between client updates and reduces the impact of data imbalance. On the other hand, SCAFFOLD uses control variates to correct for the drift introduced by heterogeneous client updates, enabling the global model to converge more reliably.
+From a healthcare perspective, these mechanisms can be particularly beneficial because medical datasets collected across institutions rarely follow identical distributions. Selecting an aggregation strategy that accounts for such variability ensures that the resulting global model remains stable and reliable when trained on distributed clinical data.
+
+Selecting an appropriate aggregation strategy depends on data heterogeneity, network infrastructure, and privacy requirements.
+
+\section{Trade-offs between Accuracy and Communication Overhead}
+
+While improving model accuracy is a primary objective of federated learning systems, practical deployments must also consider the communication overhead associated with distributed training. In federated learning, each communication round requires clients to transmit model updates to the central server and receive the updated global model. As the number of participating clients increases, this communication process can become a significant bottleneck.
+Algorithms that converge quickly with fewer communication rounds are generally better suited to large-scale deployments. Although methods such as FedProx and SCAFFOLD may introduce additional computational complexity during local training, they can potentially reduce the number of communication rounds required for convergence by improving training stability.
+This introduces a trade-off between computational complexity and communication efficiency. In practical healthcare systems, the optimal choice depends on the network infrastructure, available computational resources, and the scale of participating institutions. A well-designed federated learning framework must balance these factors to ensure efficient training while maintaining high predictive performance.
+
+\section{Deployment Considerations in Hospital Networks}
+
+Deploying federated learning models in hospital networks requires careful consideration of several operational and infrastructural factors. Unlike traditional machine learning systems, federated learning must operate across multiple decentralized institutions, each with its own data management policies, computing infrastructure, and privacy regulations.
+One of the primary challenges in such environments is maintaining data privacy and security. Since patient data cannot be transferred across institutions, federated learning provides an effective mechanism for collaborative model training without exposing sensitive medical information. However, secure communication protocols and encryption mechanisms must still be implemented to protect model updates exchanged between clients and the central server.
+Another important consideration is system interoperability. Hospitals may use different imaging systems, electronic health record platforms, and data storage formats. Ensuring that federated learning models can integrate seamlessly with these diverse systems is essential for practical deployment.
+Furthermore, the computational capabilities of participating institutions may vary significantly. Some hospitals may possess powerful computing resources, while others may rely on limited hardware infrastructure. Federated learning frameworks must therefore be designed to accommodate such variations by enabling flexible client participation and adaptive training schedules.
+By addressing these practical considerations, federated learning can become a viable solution for enabling collaborative medical AI systems that respect patient privacy while benefiting from distributed clinical data.
+
+\chapter{Conclusion}
+Having examined both the experimental performance and the practical implications of federated learning algorithms, this study summarizes its key findings and highlights potential directions for future research.
+
+\section{Summary of Findings}
+
+This study investigated the application of federated learning techniques for the classification of chest X-ray images in a distributed medical environment. Three federated optimization algorithms—FedAvg, FedProx, and SCAFFOLD—were evaluated under both IID and Non-IID data distributions to analyze their effectiveness in handling heterogeneous medical datasets.
+The experimental results demonstrated that federated learning can achieve strong classification performance while preserving data privacy across distributed healthcare institutions. All three algorithms were capable of learning meaningful patterns from the chest X-ray datasets. However, their behavior differed significantly when the data distribution across clients became heterogeneous.
+The analysis revealed that algorithms specifically designed to mitigate client drift, such as FedProx and SCAFFOLD, tend to provide more stable convergence and improved generalization performance compared to the baseline FedAvg method in heterogeneous environments.
+
+\section{Key Insights on Aggregation Behavior}
+
+The comparative evaluation of the three algorithms highlights the importance of selecting appropriate aggregation strategies in federated learning systems. The behavior of the aggregation mechanism plays a crucial role in determining the stability and reliability of the global model.
+FedAvg performs well when the data distribution across clients is relatively balanced, but its performance may degrade when there is significant heterogeneity across client datasets. FedProx addresses this limitation by constraining local model updates via proximal regularization, thereby improving stability in distributed training environments.
+SCAFFOLD further enhances convergence by introducing control variates that correct the direction of local updates. This approach effectively reduces the variance introduced by heterogeneous data distributions and enables more consistent model optimization across communication rounds.
+These observations emphasize that aggregation algorithms that mitigate client drift are particularly valuable for real-world federated learning deployments, where heterogeneous datasets are common.
+
+\section{Future Research Directions in Medical Federated Learning}
+Although this study demonstrates the potential of federated learning for distributed medical image classification, several opportunities remain for further research and development.
+Future work may explore integrating privacy-enhancing technologies, such as differential privacy and secure multi-party computation, to further strengthen data protection in federated healthcare systems. Additionally, investigating personalized federated learning approaches could help tailor models to the specific characteristics of individual institutions while still benefiting from global collaboration.
+Another promising direction is the development of adaptive aggregation strategies that dynamically adjust to varying data distributions across clients. Such approaches could improve the robustness of federated learning systems when deployed across large hospital networks.
+Finally, extending federated learning frameworks to incorporate multimodal medical data, including clinical records, imaging data, and laboratory results, may enable the development of more comprehensive and accurate diagnostic models.
+By addressing these challenges, federated learning has the potential to become a foundational technology for enabling privacy-preserving collaborative medical AI systems, ultimately contributing to improved healthcare outcomes through data-driven insights.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
