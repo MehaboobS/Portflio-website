@@ -626,16 +626,16 @@
   justify-content: center;
   align-items: center;
   gap: 3.5rem;
-  width: fit-content;
-  max-width: 100%;
+  width: 100%;
+  max-width: 900px;
   margin: 0 auto;
 }
 
 .spotlight-card-area {
-  width: 760px;
-  max-width: min(760px, calc(100vw - 160px));
-  flex-shrink: 0;
+  flex: 1;
+  max-width: 760px;
   min-width: 0;
+  width: 100%;
 }
 
 .spotlight-project-card {
@@ -647,6 +647,8 @@
   border-radius: 22px;
   padding: 2.5rem;
   min-height: 520px;
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -2850,17 +2852,42 @@
   }
 
   .spotlight-showcase-container {
-    grid-template-columns: 1fr;
-    gap: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    gap: 1.25rem;
+  }
+
+  .spotlight-card-area {
+    width: 100%;
+    max-width: 100%;
+    flex: none;
+  }
+
+  .spotlight-project-card {
+    padding: 1.5rem 1.15rem;
+    min-height: auto;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 18px;
   }
 
   .vertical-timeline-sidebar {
     order: -1;
     width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 0.5rem;
   }
 
   .vertical-scroll-track-container {
-    padding: 0.5rem 0;
+    padding: 0;
+    width: auto;
   }
 
   .vertical-scroll-track-line {
@@ -2868,17 +2895,115 @@
   }
 
   .vertical-nodes-list {
+    display: flex;
     flex-direction: row;
-    gap: 1.5rem;
+    gap: 0.85rem;
+    align-items: center;
     justify-content: center;
   }
 
-  .vertical-node-label {
-    display: none;
+  .vertical-node-circle {
+    width: 38px;
+    height: 38px;
+    font-size: 0.85rem;
   }
 
+  .vertical-node-label,
   .vertical-scroll-hints {
-    display: none;
+    display: none !important;
+  }
+
+  .spotlight-actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .spotlight-actions-bar > div:first-child {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.6rem;
+  }
+
+  .btn-project-primary,
+  .btn-project-code,
+  .spotlight-actions-bar .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+  }
+
+  .spotlight-stepper-controls {
+    width: 100%;
+    justify-content: space-between;
+    padding: 0.5rem 1.25rem;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 480px) {
+  .spotlight-project-card {
+    padding: 1.25rem 0.9rem;
+    border-radius: 16px;
+  }
+
+  .spotlight-project-title {
+    font-size: 1.3rem;
+    line-height: 1.25;
+  }
+
+  .spotlight-project-desc {
+    font-size: 1.02rem;
+    line-height: 1.6;
+    margin-bottom: 1.15rem;
+  }
+
+  .project-features-list {
+    gap: 0.5rem;
+    margin-bottom: 1.15rem;
+  }
+
+  .project-feature-row {
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .feature-text {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .project-tags-cloud {
+    gap: 0.35rem;
+    margin-bottom: 1.15rem;
+  }
+
+  .project-tech-badge {
+    font-size: 0.74rem;
+    padding: 0.25rem 0.55rem;
+  }
+
+  .modal-content,
+  .modal-research-wide,
+  .resume-modal-box {
+    padding: 1.25rem 0.9rem !important;
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  .blog-editorial-hero {
+    padding: 1.5rem 1rem;
+    border-radius: 16px;
+  }
+
+  .blog-article-main {
+    padding: 1rem 0.5rem 0 0.5rem;
+  }
+
+  .blog-main-title {
+    font-size: 1.65rem;
   }
 }
 
